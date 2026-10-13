@@ -295,29 +295,22 @@
 </div>
 <!-- 종합 산책 환경 평가 카드 -->
 <div id="walkConditionCard"
-     style="display:block; margin-top:16px; padding:16px; border-radius:12px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);">
+     style="display:block; margin-top:16px; margin-bottom:16px; padding:16px; border-radius:12px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);">
 
-    <div style="font-weight:700; font-size:1.05rem; margin-bottom:8px;">
+    <div style="font-weight:700; font-size:1.05rem; margin-bottom:12px;">
         🐾 종합 산책 환경 평가
     </div>
 
     <div id="walkConditionStatus"
-         style="font-size:1.1rem; font-weight:700; margin-bottom:10px;">
+         style="font-size:0.95rem; font-weight:700; margin-bottom:10px;">
         평가 중...
     </div>
 
     <div id="walkConditionReason"
-         style="font-size:0.85rem; line-height:1.6;">
+         style="font-size:0.82rem; line-height:1.6; color:var(--text-dim);">
         대기질과 날씨 정보를 확인하고 있습니다.
     </div>
-
-    <div style="font-size:0.72rem; color:var(--text-dim); margin-top:12px;">
-        ※ 참고용 환경 안내이며, 반려견의 건강 상태와 실제 산책 경로의 안전을 보장하지 않습니다.
-    </div>
 </div>
-
-</div>
-        </section>
 
         <!-- [탭 4] 산책일지 탭 (브라우저 로컬스토리지 보관) -->
         <section id="tab-history" class="tab-content">
@@ -449,6 +442,48 @@ setText(
 }
 
 window.loadAirQuality = loadAirQuality;
+
+// 원래 대기질 카드 HTML 보관
+const airQualityCard = document.getElementById('airQualityCard');
+const originalAirQualityHTML = airQualityCard
+    ? airQualityCard.innerHTML
+    : '';
+
+// 자치구 조회 실패 시 안내 표시
+window.showAirQualityUnavailable = function () {
+    const card = document.getElementById('airQualityCard');
+    if (!card) return;
+
+    card.innerHTML = `
+        <div style="font-weight:700; font-size:1.05rem; margin-bottom:10px;">
+            🌬️ 실시간 대기질 정보
+        </div>
+        <p>⚠️ 출발지의 자치구를 확인하지 못했습니다.</p>
+        <p>현재 출발지에 대한 대기질 정보를 표시할 수 없습니다.</p>
+    `;
+};
+
+// 기존 대기질 카드 구조 복구
+window.restoreAirQualityCard = function () {
+    const card = document.getElementById('airQualityCard');
+    if (!card || !originalAirQualityHTML) return;
+
+    card.innerHTML = originalAirQualityHTML;
+};
+// 출발지 자치구 조회 실패 시 종합 평가 안내
+window.showWalkConditionUnavailable = function () {
+    const status = document.getElementById('walkConditionStatus');
+    const reason = document.getElementById('walkConditionReason');
+
+    if (status) {
+        status.textContent = '⚠️ 종합 산책 환경 평가 불가';
+    }
+
+    if (reason) {
+        reason.textContent =
+            '출발지의 자치구를 확인하지 못해 대기질을 반영한 종합 평가를 제공할 수 없습니다.';
+    }
+};
 loadAirQuality();
 </script>
 <script>

@@ -392,6 +392,9 @@ try {
     console.log('[Dogwalk] 출발지 자치구:', locationData.district);
 
     if (locationData.district) {
+            if (typeof window.restoreAirQualityCard === 'function') {
+        window.restoreAirQualityCard();
+    }
     // 출발지 자치구의 대기질 표시
     if (typeof window.loadAirQuality === 'function') {
         window.loadAirQuality(locationData.district);
@@ -405,9 +408,28 @@ try {
             locationData.district
         );
     }
+} else {
+    // 자치구를 찾지 못한 경우
+    if (typeof window.showAirQualityUnavailable === 'function') {
+        window.showAirQualityUnavailable();
+    }
+
+    if (typeof window.showWalkConditionUnavailable === 'function') {
+        window.showWalkConditionUnavailable();
+    }
 }
 } catch (error) {
     console.warn('[Dogwalk] 출발지 자치구 확인 실패:', error);
+
+    // 이전 지역의 대기질 정보 숨기기
+    if (typeof window.showAirQualityUnavailable === 'function') {
+        window.showAirQualityUnavailable();
+    }
+
+    // 이전 지역의 종합 평가 숨기기
+    if (typeof window.showWalkConditionUnavailable === 'function') {
+        window.showWalkConditionUnavailable();
+    }
 }
 const endLonLat = endObj.coords;
 
