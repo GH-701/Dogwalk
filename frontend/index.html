@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Green Path & 댕댕한바퀴 - 반려견 안심 산책 & 실시간 기록 플랫폼</title>
+    <!-- OpenLayers 8.x CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v8.1.0/ol.css">
+    <!-- Google Fonts (Pretendard & Outfit) -->
+    <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <!-- 메인 스타일시트 -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- 1. OpenLayers 배경 지도 컨테이너 -->
+    <div id="map"></div>
+
+    <!-- 2. 브이월드 지도 전환 스위처 (위성+도로 / 위성영상 / 일반지도) -->
+    <div class="map-type-control">
+        <button type="button" class="map-type-btn active" id="btnMapHybrid" onclick="changeMapType('hybrid')">🗺️ 위성+도로</button>
+        <button type="button" class="map-type-btn" id="btnMapSat" onclick="changeMapType('satellite')">🛰️ 위성영상</button>
+        <button type="button" class="map-type-btn" id="btnMapBase" onclick="changeMapType('base')">🏙️ 일반지도</button>
+    </div>
+
+    <!-- 3. 실시간 GPS 위치 탐색 플로팅 버튼 -->
+    <button type="button" class="map-gps-btn" id="btnGpsTrack" onclick="findMyGPSLocation()">
+        <span style="font-size:1.1rem; line-height:1;">🎯</span>
+        <span id="gpsBtnText">내 GPS 위치</span>
+    </button>
+
+    <!-- 4. 지도 팝업 오버레이 -->
+    <div id="popup" class="ol-popup">
+        <a href="#" id="popup-closer" class="ol-popup-closer">✖</a>
+        <div id="popup-content"></div>
+    </div>
+
+    <!-- 5. 좌측 통합 컨트롤 사이드바 -->
+    <aside class="sidebar">
+        <!-- 상단 헤더 & 로고 -->
+        <header class="header">
+            <div class="logo-wrap">
+                <h1>Green Path</h1>
+                <span class="guest-badge">회원가입 없는 간편모드</span>
+            </div>
+            <div class="desc">댕댕한바퀴 실시간 산책 기록 & 공공데이터 안심 큐레이션</div>
+        </header>
+
+        <!-- 반려견 체급 선택 필터 (소형견/중형견/대형견) -->
+        <div class="pet-bar">
+            <div class="pet-info">
+                <span class="pet-name">내 반려견 설정</span>
+                <span class="pet-sub" id="petSizeLabel">소형견(10kg 미만) 맞춤 분석</span>
+            </div>
+            <div class="size-btns" id="dogSizeGroup">
+                <button type="button" class="size-btn active" data-size="small">소형견</button>
+                <button type="button" class="size-btn" data-size="medium">중형견</button>
+                <button type="button" class="size-btn" data-size="large">대형견</button>
+            </div>
+        </div>
+
+        <!-- 5대 기능 내비게이션 탭 -->
+        <nav class="nav-tabs">
+            <div class="nav-tab active" onclick="switchTab('tab-walk')">실시간 산책</div>
+            <div class="nav-tab" onclick="switchTab('tab-curation')">추천 코스</div>
+            <div class="nav-tab" onclick="switchTab('tab-eval')">안전도 평가</div>
+            <div class="nav-tab" onclick="switchTab('tab-history')">산책일지</div>
+            <div class="nav-tab" onclick="switchTab('tab-guide')">응급 가이드</div>
+        </nav>
+
+        <!-- [탭 1] 실시간 산책 트래커 화면 -->
+        <section id="tab-walk" class="tab-content active">
+            <div class="walk-tracker-box">
+                <span style="font-size:0.75rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px;">WALK TRACKER</span>
+                <div class="stopwatch" id="stopwatchText">00:00:00</div>
+                <div class="walk-stats-row">
+                    <div class="stat-item">
+                        <div class="stat-val" id="walkDistText">0.00 <span style="font-size:0.75rem;">km</span></div>
+                        <div class="stat-lbl">산책 거리</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-val" id="walkPaceText">0.0 <span style="font-size:0.75rem;">km/h</span></div>
+                        <div class="stat-lbl">평균 속도</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-val" id="walkStatusText">준비 완료</div>
+                        <div class="stat-lbl">산책 상태</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4대 산책 행동 마커 버튼 (식수, 소변, 대변, 위험 마킹) -->
+            <div style="font-size:0.75rem; color:#CBD5E1; font-weight:600; margin-bottom:8px;">
+                실시간 산책 행동 마킹 (클릭 시 지도 위치 기록)
+            </div>
+            <div class="action-markers-grid">
+                <div class="marker-btn" onclick="addWalkEvent('water')">
+                    <span class="marker-icon">💧</span>
+                    <span class="marker-name">식수</span>
+                    <span class="marker-count" id="cntWater">0</span>
+                </div>
+                <div class="marker-btn" onclick="addWalkEvent('pee')">
+                    <span class="marker-icon">🟡</span>
+                    <span class="marker-name">소변</span>
+                    <span class="marker-count" id="cntPee">0</span>
+                </div>
+                <div class="marker-btn" onclick="addWalkEvent('poop')">
+                    <span class="marker-icon">🟤</span>
+                    <span class="marker-name">대변</span>
+                    <span class="marker-count" id="cntPoop">0</span>
+                </div>
+                <div class="marker-btn" onclick="addWalkEvent('danger')">
+                    <span class="marker-icon">⚠️</span>
+                    <span class="marker-name">위험구간</span>
+                    <span class="marker-count" id="cntDanger" style="color:var(--danger);">0</span>
+                </div>
+            </div>
+
+            <!-- 산책 시작 / 일시정지 / 종료 버튼 -->
+            <div class="walk-ctrl-btns">
+                <button type="button" class="walk-btn walk-btn-start" id="btnWalkStart" onclick="startWalk()">
+                    산책 시작하기
+                </button>
+                <button type="button" class="walk-btn walk-btn-pause" id="btnWalkPause" onclick="pauseWalk()" style="display:none;">
+                    일시정지
+                </button>
+                <button type="button" class="walk-btn walk-btn-end" id="btnWalkEnd" onclick="endWalk()" style="display:none;">
+                    산책 종료
+                </button>
+            </div>
+        </section>
+
+        <!-- [탭 2] 추천 코스 탭 (실제 공공데이터 3종 융합) -->
+        <section id="tab-curation" class="tab-content">
+            <div class="api-chips">
+                <span class="chip chip-green">● 서울시 공원</span>
+                <span class="chip chip-blue">● 문화정보원(7만건 동반시설)</span>
+                <span class="chip chip-orange">● 식약처(반려동물 음식점)</span>
+            </div>
+            <div class="park-list" id="placeList">
+                <div style="text-align:center; padding: 25px; color: var(--primary);">
+                    공공데이터 실시간 로딩 중...
+                </div>
+            </div>
+        </section>
+
+        <!-- [탭 3] 안전도 평가 탭 (GIS 경로 알고리즘 & 보행 도로망 분석) -->
+        <section id="tab-eval" class="tab-content">
+            <div class="input-group">
+                <input type="text" class="input-field" id="startPoint" placeholder="출발지 (예: 마포구청역, 서울숲역)" value="마포구청역">
+                <input type="text" class="input-field" id="endPoint" placeholder="도착지 (예: 홍대입구역, 뚝섬한강공원)" value="홍대입구역">
+            </div>
+
+            <!-- 서울 권역별 저위험/녹지 우선 산책 프리셋 -->
+            <div style="font-size:0.75rem; color:#94A3B8; margin-bottom:6px; font-weight:600;">🌿 서울 권역별 차도 회피 & 안심 산책로 프리셋</div>
+            <div style="display:flex; gap:5px; margin-bottom:12px; flex-wrap:wrap;">
+                <button type="button" class="chip" style="background:rgba(74,222,128,0.15); border:1px solid rgba(74,222,128,0.3); color:#4ADE80; cursor:pointer;" onclick="setRoutePreset('능동로16길', '광나루로26길')">🐕 능동로16길 ➜ 광나루로26길 (골목길)</button>
+                <button type="button" class="chip" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#CBD5E1; cursor:pointer;" onclick="setRoutePreset('마포구청역', '홍대입구역')">📍 마포구청 ➜ 홍대(경의선숲길)</button>
+                <button type="button" class="chip" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#CBD5E1; cursor:pointer;" onclick="setRoutePreset('서울숲역', '뚝섬한강공원')">📍 서울숲 ➜ 뚝섬수변길</button>
+                <button type="button" class="chip" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#CBD5E1; cursor:pointer;" onclick="setRoutePreset('여의도역', '여의도한강공원')">📍 여의도공원 ➜ 물빛광장</button>
+                <button type="button" class="chip" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#CBD5E1; cursor:pointer;" onclick="setRoutePreset('시청역', '경복궁역')">📍 시청 ➜ 광화문 ➜ 경복궁(숲길)</button>
+                <button type="button" class="chip" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#CBD5E1; cursor:pointer;" onclick="setRoutePreset('강남역', '양재시민의숲')">📍 강남 ➜ 양재천 수변길</button>
+                <button type="button" class="chip" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#CBD5E1; cursor:pointer;" onclick="setRoutePreset('잠실역', '올림픽공원')">📍 잠실 ➜ 석촌호수 ➜ 올림픽공원</button>
+            </div>
+
+            <button type="button" class="walk-btn walk-btn-start" style="width:100%;" id="btnEvalRoute" onclick="evaluateRoute()">
+                🛡️ 차도 회피 & 안심 산책로 분석
+            </button>
+
+            <!-- 분석 결과 점수 카드 -->
+            <div class="score-card" id="scoreCard">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <div>
+                        <div style="font-weight:700; font-size:1.05rem;" id="evalTitle">안전도 분석 완료</div>
+                        <div style="font-size:0.75rem; color:var(--text-dim);">도로 폭 & 녹지 & 동반시설 연계성 종합 점수</div>
+                    </div>
+                    <div class="score-circle" id="totalScore">0</div>
+                </div>
+                
+                <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-bottom:4px;">
+                    <span>녹지 및 공원 비율</span><span id="stat1Text">--%</span>
+                </div>
+                <div class="stat-bar"><div class="stat-fill" id="stat1Bar" style="width:0%; background:var(--primary);"></div></div>
+                
+                <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-bottom:4px;">
+                    <span id="stat2Label">보행로 폭 & 교행 위험도</span><span id="stat2Text">--%</span>
+                </div>
+                <div class="stat-bar"><div class="stat-fill" id="stat2Bar" style="width:0%; background:var(--danger);"></div></div>
+                
+                <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-bottom:4px;">
+                    <span>경로 주변 동반 편의시설</span><span id="stat3Text">--곳</span>
+                </div>
+                <div class="stat-bar"><div class="stat-fill" id="stat3Bar" style="width:0%; background:var(--accent-blue);"></div></div>
+
+                <div style="font-size:0.8rem; color:#CBD5E1; padding-top:10px; border-top:1px solid rgba(255,255,255,0.08); line-height:1.45;" id="evalFeedback">
+                    AI 분석 결과가 여기에 표시됩니다.
+                </div>
+            </div>
+        </section>
+
+        <!-- [탭 4] 산책일지 탭 (브라우저 로컬스토리지 보관) -->
+        <section id="tab-history" class="tab-content">
+            <div style="font-size:0.78rem; color:var(--text-dim); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+                <span>브라우저에 보관된 산책 기록</span>
+                <button type="button" onclick="clearHistory()" style="background:none; border:none; color:var(--danger); font-size:0.72rem; cursor:pointer;">기록 비우기</button>
+            </div>
+            <div id="historyList">
+                <div style="text-align:center; padding:30px; color:var(--text-dim); font-size:0.85rem;">
+                    아직 산책 기록이 없습니다.<br>'실시간 산책' 탭에서 산책을 완료해보세요!
+                </div>
+            </div>
+        </section>
+
+        <!-- [탭 5] 응급 가이드 탭 (댕댕한바퀴 반려견 안전 가이드북) -->
+        <section id="tab-guide" class="tab-content">
+            <div class="guide-grid">
+                <article class="guide-card">
+                    <div class="guide-title">🚨 산책 중 이물질(초콜릿·담배꽁초) 섭취 시</div>
+                    <div class="guide-step">억지로 구토를 유발하지 마세요. (식도 손상 위험)</div>
+                    <div class="guide-step">섭취한 물질의 포장지나 성분 사진을 확보하세요.</div>
+                    <div class="guide-step">지도에서 가장 가까운 동물병원(문화정보원 데이터)으로 즉시 이동하세요.</div>
+                </article>
+                <article class="guide-card">
+                    <div class="guide-title">🌡️ 여름철 아스팔트 열기 & 발바닥 화상 예방</div>
+                    <div class="guide-step">보호자의 손등을 아스팔트에 7초간 대어보세요.</div>
+                    <div class="guide-step">뜨겁다면 발바닥 패드가 벗겨질 수 있으니 흙길/공원으로 우회하세요.</div>
+                    <div class="guide-step">15분마다 그늘에서 식수 마커를 기록하며 수분을 보충해주세요.</div>
+                </article>
+                <article class="guide-card">
+                    <div class="guide-title">🐕 공격적인 다른 반려견과 마주쳤을 때</div>
+                    <div class="guide-step">아이를 번쩍 안아 올리면 상대견의 점프 공격을 유발할 수 있습니다.</div>
+                    <div class="guide-step">몸을 돌려 시선을 차단하고 지그재그로 천천히 멀어지세요.</div>
+                    <div class="guide-step">대형견 모드 산책 시 '위험구간' 마커를 찍어 경로를 공유하세요.</div>
+                </article>
+            </div>
+        </section>
+    </aside>
+
+    <!-- OpenLayers 8.x JavaScript 라이브러리 -->
+    <script src="https://cdn.jsdelivr.net/npm/ol@v8.1.0/dist/ol.js"></script>
+
+    <!-- 프론트엔드 모듈 순차 로드 (의존성 순서) -->
+    <script src="js/data-dict.js"></script>
+    <script src="js/map-service.js"></script>
+    <script src="js/gps-service.js"></script>
+    <script src="js/walk-tracker.js"></script>
+    <script src="js/curation-service.js"></script>
+    <script src="js/routing-service.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

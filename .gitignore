@@ -1,0 +1,27 @@
+# 의존성 모듈
+node_modules/
+package-lock.json
+
+# 환경 변수 및 보안 키 (중요!)
+.env
+*.env.local
+
+# OS 생성 파일
+.DS_Store
+Thumbs.db
+
+# 로그 및 런타임 데이터
+*.log
+npm-debug.log*
+
+# 임시 파일 및 대용량 자료/압축 파일 제외
+*.zip
+*.pptx
+*.png
+test_*.ps1
+tomato_extracted/
+zz_extracted/
+dangdang_FE_src/
+scratch/
+API 모음.txt
+api 하나더.txt

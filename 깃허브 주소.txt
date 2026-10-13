@@ -1,0 +1,6 @@
+댕댕워크(반려견 산책 및 건강 기록) : https://github.com/dangdangwalk/dangdang-walk.git
+반려견 산책 추천 프로그램 : https://github.com/HanbiJang/android-dog-walk-app.git
+ - T맵 지도 및 기피 견종 알림은 제외 -> 브이월드와 카카오지도 연동
+두 깃허브 다 회원가입 필요 -> 진행중인 프로젝트에선 회원가입 및 로그인해서 할수있는 모든 기능 제외
+진행 프로그램과 제일 비슷한 깃허브 : https://github.com/choi-sus/dangdang_FE.git
+-> 이 깃허브에서 업그레이드 요청
