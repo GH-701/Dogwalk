@@ -168,13 +168,16 @@
 
             <!-- 분석 결과 점수 카드 -->
             <div class="score-card" id="scoreCard">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                    <div>
-                        <div style="font-weight:700; font-size:1.05rem;" id="evalTitle">안전도 분석 완료</div>
-                        <div style="font-size:0.75rem; color:var(--text-dim);">도로 폭 & 녹지 & 동반시설 연계성 종합 점수</div>
-                    </div>
-                    <div class="score-circle" id="totalScore">0</div>
-                </div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div>
+            <div style="font-weight:700; font-size:1.05rem;" id="evalTitle">산책 경로 분석 완료</div>
+            <div style="font-size:0.75rem; color:var(--text-dim);">실제 도보 경로 기반 공원 접근성 분석 결과</div>
+        </div>
+        <div style="text-align:center;">
+    <div style="font-size:0.75rem; font-weight:600; margin-bottom:5px;">공원 접근성</div>
+    <div class="score-circle" id="totalScore">0</div>
+</div>
+    </div>
                 
                 <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-bottom:4px;">
                     <span>녹지 및 공원 비율</span><span id="stat1Text">--%</span>
@@ -195,6 +198,125 @@
                     AI 분석 결과가 여기에 표시됩니다.
                 </div>
             </div>
+        <!-- 실시간 대기질 정보 카드 -->
+<div id="airQualityCard" style="display:block; margin-top:16px; padding:16px; border-radius:12px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);">
+
+    <div style="font-weight:700; font-size:1.05rem; margin-bottom:5px;">
+        🌬️ 실시간 대기질 정보
+    </div>
+
+    <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:14px;">
+        서울시 공공데이터 기반 측정소 대기환경 정보
+    </div>
+
+    <div style="font-size:0.85rem; margin-bottom:10px;">
+        📍 측정 지역: <strong id="airRegion">마포구</strong>
+    </div>
+
+    <div style="font-size:0.85rem; margin-bottom:10px;">
+        미세먼지 PM10:
+        <strong id="airPM10">불러오는 중...</strong>
+    </div>
+
+    <div style="font-size:0.85rem; margin-bottom:10px;">
+        초미세먼지 PM2.5:
+        <strong id="airPM25">불러오는 중...</strong>
+    </div>
+
+    <div style="font-size:0.85rem; margin-bottom:10px;">
+        오존 O₃:
+        <strong id="airOzone">불러오는 중...</strong>
+    </div>
+
+    <div style="font-size:0.85rem; margin-bottom:10px;">
+        통합대기환경지수:
+        <strong id="airGrade">불러오는 중...</strong>
+        <div id="airAdvice"
+     style="margin-top:12px; padding:12px; border-radius:10px; background:rgba(255,255,255,0.06); font-size:0.82rem; line-height:1.5;">
+    🌿 대기질 안내를 불러오는 중...
+</div>
+    </div>
+
+    <div style="font-size:0.75rem; color:var(--text-dim); margin-top:12px;">
+        🕒 측정 시각: <span id="airTime">확인 중...</span>
+    </div>
+
+    <div style="font-size:0.72rem; color:var(--text-dim); margin-top:8px;">
+        ※ 측정소 기준 대기질 정보이며, 산책 경로 전체의 실측값은 아닙니다.
+    </div>
+    <!-- 실시간 날씨 정보 카드 -->
+<div id="weatherCard"
+
+
+<!-- 실시간 날씨 정보 카드 -->
+<div id="weatherCard"
+     style="display:block; margin-top:16px; padding:16px; border-radius:12px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);">
+
+    <div style="font-weight:700; font-size:1.05rem; margin-bottom:5px;">
+        🌤️ 실시간 날씨 정보
+    </div>
+
+    <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:14px;">
+        기상청 초단기실황 기반 날씨 정보
+    </div>
+
+    <div style="font-size:0.85rem; margin-bottom:10px;">
+        📍 지역: <strong id="weatherRegion">확인 중...</strong>
+    </div>
+
+    <div style="font-size:0.85rem; margin-bottom:10px;">
+        🌡️ 기온: <strong id="weatherTemp">불러오는 중...</strong>
+    </div>
+
+    <div style="font-size:0.85rem; margin-bottom:10px;">
+        💧 습도: <strong id="weatherHumidity">불러오는 중...</strong>
+    </div>
+
+    <div style="font-size:0.85rem; margin-bottom:10px;">
+        🌧️ 1시간 강수량: <strong id="weatherRain">불러오는 중...</strong>
+    </div>
+
+    <div style="font-size:0.85rem; margin-bottom:10px;">
+    🍃 풍속: <strong id="weatherWind">불러오는 중...</strong>
+</div>
+
+<div id="weatherAdvice"
+     style="margin-top:12px; padding:12px; border-radius:10px; background:rgba(255,255,255,0.06); font-size:0.82rem; line-height:1.5;">
+    🐾 날씨에 따른 산책 안내를 불러오는 중...
+</div>
+
+    <div style="font-size:0.75rem; color:var(--text-dim); margin-top:12px;">
+        🕒 발표 기준 시각: <span id="weatherTime">확인 중...</span>
+    </div>
+
+    <div style="font-size:0.72rem; color:var(--text-dim); margin-top:8px;">
+        ※ 기상청 격자 기준 관측 정보이며 산책 경로 전체의 실측값은 아닙니다.
+    </div>
+</div>
+<!-- 종합 산책 환경 평가 카드 -->
+<div id="walkConditionCard"
+     style="display:block; margin-top:16px; padding:16px; border-radius:12px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);">
+
+    <div style="font-weight:700; font-size:1.05rem; margin-bottom:8px;">
+        🐾 종합 산책 환경 평가
+    </div>
+
+    <div id="walkConditionStatus"
+         style="font-size:1.1rem; font-weight:700; margin-bottom:10px;">
+        평가 중...
+    </div>
+
+    <div id="walkConditionReason"
+         style="font-size:0.85rem; line-height:1.6;">
+        대기질과 날씨 정보를 확인하고 있습니다.
+    </div>
+
+    <div style="font-size:0.72rem; color:var(--text-dim); margin-top:12px;">
+        ※ 참고용 환경 안내이며, 반려견의 건강 상태와 실제 산책 경로의 안전을 보장하지 않습니다.
+    </div>
+</div>
+
+</div>
         </section>
 
         <!-- [탭 4] 산책일지 탭 (브라우저 로컬스토리지 보관) -->
@@ -246,5 +368,279 @@
     <script src="js/curation-service.js"></script>
     <script src="js/routing-service.js"></script>
     <script src="js/app.js"></script>
+<script>
+async function loadAirQuality(region = '마포구') {
+    const setText = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+    };
+
+    try {
+        const response = await fetch('/api/air-quality');
+
+        if (!response.ok) {
+            throw new Error('대기질 API 요청 실패: ' + response.status);
+        }
+
+        const data = await response.json();
+        const rows = data.RealtimeCityAir?.row;
+
+        if (!Array.isArray(rows)) {
+            throw new Error('대기질 데이터 형식이 올바르지 않습니다.');
+        }
+
+        // 전달받은 지역의 측정소 데이터 표시
+const air = rows.find(item => item.MSRSTN_NM === region);
+
+if (!air) {
+    throw new Error(region + ' 대기질 데이터가 없습니다.');
+}
+
+        setText('airRegion', air.MSRSTN_NM);
+
+        setText('airPM10',
+            air.PM != null ? air.PM + ' ㎍/㎥' : '정보 없음');
+
+        setText('airPM25',
+            air.FPM != null ? air.FPM + ' ㎍/㎥' : '정보 없음');
+
+        setText('airOzone',
+            air.OZON != null ? air.OZON + ' ppm' : '정보 없음');
+
+        setText('airGrade',
+            air.CAI_GRD
+                ? air.CAI_GRD + ' (지수 ' + (air.CAI_IDX ?? '정보 없음') + ')'
+                : '정보 없음');
+
+        const time = String(air.MSRMT_DT || '');
+
+        const formattedTime = time.length === 12
+            ? time.slice(0, 4) + '-' +
+              time.slice(4, 6) + '-' +
+              time.slice(6, 8) + ' ' +
+              time.slice(8, 10) + ':' +
+              time.slice(10, 12)
+            : '정보 없음';
+
+        setText('airTime', formattedTime);
+        const adviceByGrade = {
+    '좋음': '🌿 대기질이 좋음 등급입니다. 날씨와 반려견의 상태도 확인하고 산책하세요.',
+    '보통': '🐶 대기질이 보통 등급입니다. 미세먼지와 오존 수치, 반려견의 상태를 확인하세요.',
+    '나쁨': '⚠️ 대기질이 나쁨 등급입니다. 야외 활동을 줄이는 것을 고려하세요.',
+    '매우나쁨': '🚨 대기질이 매우 나쁨 등급입니다. 야외 산책을 피하는 것이 좋습니다.'
+};
+
+setText(
+    'airAdvice',
+    adviceByGrade[air.CAI_GRD] || '대기질 등급을 확인할 수 없습니다.'
+);
+
+        console.log('[Dogwalk] 대기질 정보 로딩 성공:', air);
+
+    } catch (error) {
+        console.error('[Dogwalk] 대기질 오류:', error);
+
+        setText('airPM10', '불러오기 실패');
+        setText('airPM25', '불러오기 실패');
+        setText('airOzone', '불러오기 실패');
+        setText('airGrade', '확인 불가');
+        setText('airTime', '확인 불가');
+    }
+}
+
+window.loadAirQuality = loadAirQuality;
+loadAirQuality();
+</script>
+<script>
+async function loadWeather(lon, lat) {
+    const setWeatherText = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+    };
+
+    try {
+        const params = new URLSearchParams();
+
+if (lon != null && lat != null) {
+    params.set('lon', lon);
+    params.set('lat', lat);
+}
+
+const weatherUrl = params.toString()
+    ? '/api/weather?' + params.toString()
+    : '/api/weather';
+
+const response = await fetch(weatherUrl);
+
+        if (!response.ok) {
+            throw new Error('날씨 API 요청 실패: ' + response.status);
+        }
+
+        const data = await response.json();
+
+        setWeatherText('weatherRegion', data.region || '정보 없음');
+
+        setWeatherText('weatherTemp',
+            data.temperature != null ? data.temperature + ' °C' : '정보 없음');
+
+        setWeatherText('weatherHumidity',
+            data.humidity != null ? data.humidity + ' %' : '정보 없음');
+
+        setWeatherText('weatherRain',
+            data.rainfall != null ? data.rainfall + ' mm' : '정보 없음');
+
+        setWeatherText('weatherWind',
+            data.windSpeed != null ? data.windSpeed + ' m/s' : '정보 없음');
+
+        const date = String(data.baseDate || '');
+        const time = String(data.baseTime || '');
+
+        const formattedTime = date.length === 8 && time.length === 4
+            ? date.slice(0, 4) + '-' +
+              date.slice(4, 6) + '-' +
+              date.slice(6, 8) + ' ' +
+              time.slice(0, 2) + ':' +
+              time.slice(2, 4)
+            : '정보 없음';
+
+        setWeatherText('weatherTime', formattedTime);// 날씨 기반 산책 안내
+const temperature = Number(data.temperature);
+const rainfall = String(data.rainfall ?? '');
+
+let weatherAdvice = '';
+
+if (data.temperature == null || !Number.isFinite(temperature)) {
+    weatherAdvice = '🌤️ 기온 정보가 없어 산책 환경을 판단하기 어렵습니다.';
+} else if (rainfall !== '' && rainfall !== '0' && rainfall !== '강수없음') {
+    weatherAdvice = '🌧️ 강수가 관측되었습니다. 산책 전 비와 노면 상태를 확인하세요.';
+} else if (temperature >= 30) {
+    weatherAdvice = '🔥 기온이 높습니다. 반려견의 열사병과 뜨거운 바닥에 주의하세요.';
+} else if (temperature <= 0) {
+    weatherAdvice = '❄️ 기온이 낮습니다. 반려견의 체온 유지와 발바닥 상태에 주의하세요.';
+} else {
+    weatherAdvice = '🐶 기온과 강수량만으로는 큰 주의 요인이 확인되지 않았습니다. 대기질과 반려견의 상태도 함께 확인하세요.';
+}
+
+setWeatherText('weatherAdvice', weatherAdvice);
+
+        console.log('[Dogwalk] 날씨 정보 로딩 성공:', data);
+
+    } catch (error) {
+        console.error('[Dogwalk] 날씨 오류:', error);
+
+        setWeatherText('weatherRegion', '확인 불가');
+        setWeatherText('weatherTemp', '불러오기 실패');
+        setWeatherText('weatherHumidity', '불러오기 실패');
+        setWeatherText('weatherRain', '불러오기 실패');
+        setWeatherText('weatherWind', '불러오기 실패');
+        setWeatherText('weatherTime', '확인 불가');
+    }
+}
+
+window.loadWeather = loadWeather;
+loadWeather();
+</script>
+<script>
+async function loadWalkCondition(lon, lat, region = '마포구') {
+    const statusEl = document.getElementById('walkConditionStatus');
+    const reasonEl = document.getElementById('walkConditionReason');
+
+    if (!statusEl || !reasonEl) return;
+
+    try {
+    // 출발지 좌표가 있으면 해당 위치의 날씨 조회
+    const params = new URLSearchParams();
+
+    if (lon != null && lat != null) {
+        params.set('lon', lon);
+        params.set('lat', lat);
+    }
+
+    const weatherUrl = params.toString()
+        ? '/api/weather?' + params.toString()
+        : '/api/weather';
+
+    const [airResponse, weatherResponse] = await Promise.all([
+        fetch('/api/air-quality'),
+        fetch(weatherUrl)
+    ]);
+
+        if (!airResponse.ok || !weatherResponse.ok) {
+            throw new Error('환경 데이터 요청 실패');
+        }
+
+        const airData = await airResponse.json();
+        const weatherData = await weatherResponse.json();
+
+        const air = airData.RealtimeCityAir?.row?.find(
+            item => item.MSRSTN_NM === region
+        );
+
+        if (!air) {
+            throw new Error('마포구 대기질 정보 없음');
+        }
+
+        const temperature = Number(weatherData.temperature);
+        const rain = String(weatherData.rainfall ?? '').trim();
+        const grade = String(air.CAI_GRD || '').trim();
+
+        if (
+            weatherData.temperature == null ||
+            !Number.isFinite(temperature) ||
+            !grade
+        ) {
+            throw new Error('평가에 필요한 데이터가 부족합니다.');
+        }
+
+        const reasons = [];
+
+        if (grade === '매우나쁨' || grade === '나쁨') {
+    reasons.push(region + ' 대기질이 ' + grade + ' 등급입니다.');
+} else {
+    reasons.push(region + ' 대기질은 ' + grade + ' 등급입니다.');
+}
+
+        if (rain !== '0' && rain !== '강수없음' && rain !== '') {
+            reasons.push('강수가 관측되었습니다.');
+        }
+
+        if (temperature >= 30) {
+            reasons.push('고온으로 인한 열사병과 뜨거운 노면에 주의하세요.');
+        } else if (temperature <= 0) {
+            reasons.push('낮은 기온으로 인한 체온 저하에 주의하세요.');
+        } else {
+            reasons.push('기온은 ' + temperature + '°C입니다.');
+        }
+
+        const hasRain = rain !== '0' && rain !== '강수없음' && rain !== '';
+        const severe = grade === '매우나쁨';
+        const caution =
+            grade === '나쁨' ||
+            hasRain ||
+            temperature >= 30 ||
+            temperature <= 0;
+
+        if (severe) {
+            statusEl.textContent = '🚨 야외 산책 자제 권장';
+        } else if (caution) {
+            statusEl.textContent = '⚠️ 산책 시 주의 필요';
+        } else {
+            statusEl.textContent = '🌿 뚜렷한 환경 주의 요인 없음';
+        }
+
+        reasonEl.textContent = reasons.join(' ');
+
+    } catch (error) {
+        console.error('[Dogwalk] 종합 산책 환경 평가 오류:', error);
+
+        statusEl.textContent = '❔ 평가 불가';
+        reasonEl.textContent =
+            '대기질 또는 날씨 정보를 확인하지 못했습니다.';
+    }
+}
+
+window.loadWalkCondition = loadWalkCondition;
+loadWalkCondition();
+</script>
 </body>
 </html>

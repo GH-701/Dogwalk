@@ -282,6 +282,76 @@ function buildRoadSegments(pStart, pEnd) {
 }
 
 // 4. 경로 안전도 평가 함수 (지오코딩 & 실제 위치 기반 보행 라인 렌더링)
+// 실제 경로 주변 공원 접근성 분석
+function analyzeRouteParks(routeCoords) {
+    const parks = Array.isArray(rawParksData) ? rawParksData : [];
+
+    const validParks = parks.filter(park => {
+        const lon = Number(park.XCRD);
+        const lat = Number(park.YCRD);
+
+        return Number.isFinite(lon) &&
+               Number.isFinite(lat) &&
+               lon >= 124 && lon <= 132 &&
+               lat >= 33 && lat <= 39 &&
+               !(lon === 0 && lat === 0);
+    });
+
+    // 경로를 따라 약 50m 간격으로 샘플링
+    const route = new ol.geom.LineString(
+        routeCoords.map(coord => ol.proj.fromLonLat(coord))
+    );
+
+    const routeLength = ol.sphere.getLength(route, {
+        projection: 'EPSG:3857'
+    });
+
+    const sampleCount = Math.max(
+        1,
+        Math.min(500, Math.ceil(routeLength / 50))
+    );
+
+    let nearParkSamples = 0;
+    const nearbyParkNames = new Set();
+
+    for (let i = 0; i <= sampleCount; i++) {
+        const position = route.getCoordinateAt(i / sampleCount);
+        const lonLat = ol.proj.toLonLat(position);
+
+        let nearPark = false;
+
+        for (const park of validParks) {
+            const parkCoords = [
+                Number(park.XCRD),
+                Number(park.YCRD)
+            ];
+
+            const distance = ol.sphere.getDistance(
+                lonLat,
+                parkCoords
+            );
+
+            if (distance <= 1000) {
+                nearPark = true;
+
+                if (park.PARK_NM) {
+                    nearbyParkNames.add(park.PARK_NM);
+                }
+            }
+        }
+
+        if (nearPark) {
+            nearParkSamples++;
+        }
+    }
+
+    return {
+        parkProximityPercent: Math.round(
+            (nearParkSamples / (sampleCount + 1)) * 100
+        ),
+        nearbyParkCount: nearbyParkNames.size
+    };
+}
 window.evaluateRoute = async function() {
     const startName = document.getElementById('startPoint').value.trim();
     const endName = document.getElementById('endPoint').value.trim();
@@ -298,50 +368,141 @@ window.evaluateRoute = async function() {
         ]);
 
         const startLonLat = startObj.coords;
-        const endLonLat = endObj.coords;
+        console.log('[Dogwalk] 산책 출발지 좌표:', startLonLat);
+        // 산책 출발지 좌표로 날씨 정보 갱신
+if (typeof window.loadWeather === 'function') {
+    window.loadWeather(startLonLat[0], startLonLat[1]);
+}
 
-        const { points: routePoints, distanceMeter } = buildWalkRoutePoints(startObj, endObj);
+        // 출발지 좌표로 자치구를 확인하고 대기질 갱신
+try {
+    const lon = startLonLat[0];
+    const lat = startLonLat[1];
+
+    const response = await fetch(
+        `/api/reverse-geocode?lon=${lon}&lat=${lat}`
+    );
+
+    if (!response.ok) {
+        throw new Error('자치구 조회 실패');
+    }
+
+    const locationData = await response.json();
+
+    console.log('[Dogwalk] 출발지 자치구:', locationData.district);
+
+    if (locationData.district) {
+    // 출발지 자치구의 대기질 표시
+    if (typeof window.loadAirQuality === 'function') {
+        window.loadAirQuality(locationData.district);
+    }
+
+    // 출발지 날씨 + 해당 자치구 대기질로 종합 평가
+    if (typeof window.loadWalkCondition === 'function') {
+        window.loadWalkCondition(
+            startLonLat[0],
+            startLonLat[1],
+            locationData.district
+        );
+    }
+}
+} catch (error) {
+    console.warn('[Dogwalk] 출발지 자치구 확인 실패:', error);
+}
+const endLonLat = endObj.coords;
+
+        // Valhalla 백엔드 API에서 실제 도보 경로 가져오기
+const routeParams = new URLSearchParams({
+    startLon: startLonLat[0],
+    startLat: startLonLat[1],
+    endLon: endLonLat[0],
+    endLat: endLonLat[1]
+});
+
+const routeResponse = await fetch(`/api/walking-route?${routeParams}`);
+
+if (!routeResponse.ok) {
+    const errorData = await routeResponse.json().catch(() => ({}));
+    throw new Error(errorData.error || '실제 도보 경로를 가져오지 못했습니다.');
+}
+
+const routeData = await routeResponse.json();
+
+if (!Array.isArray(routeData.coordinates) || routeData.coordinates.length < 2) {
+    throw new Error('도보 경로 좌표가 올바르지 않습니다.');
+}
+
+const routePoints = routeData.coordinates.map(coord => ol.proj.fromLonLat(coord));
+const distanceMeter = routeData.distanceMeter;
         const distKm = (distanceMeter / 1000).toFixed(2);
         const walkMin = Math.round((distanceMeter / 1000) * 15); // 분당 65m 기준
 
         document.getElementById('scoreCard').style.display = 'block';
-        const seed = startName.length + endName.length;
-        let greenRatio = Math.min(92, Math.max(45, 60 + (seed % 25)));
-        let carDanger = Math.min(60, Math.max(12, 100 - greenRatio - 10));
-        let nearbyHotplaces = (seed % 5) + 3;
+        
+       // 실제 Valhalla 산책 경로를 이용한 공원 접근성 분석
+const parkAnalysis = analyzeRouteParks(routeData.coordinates);
 
-        // 실제 주거/보행자 전용 도로인 경우 안전 점수 대폭 우대
-        const isPedestrianFriendly = (startObj.roadType === 'residential' || startObj.roadType === 'living_street' || startObj.roadLine) ||
-                                    (endObj.roadType === 'residential' || endObj.roadType === 'living_street' || endObj.roadLine);
-        if (isPedestrianFriendly) {
-            greenRatio = Math.min(95, greenRatio + 15);
-            carDanger = Math.max(8, carDanger - 16);
-        }
+const greenRatio = parkAnalysis.parkProximityPercent;
+const nearbyHotplaces = parkAnalysis.nearbyParkCount;
 
-        let sizeFeedback = "";
-        if (currentDogSize === 'large') {
-            carDanger = Math.min(100, carDanger + 18);
-            document.getElementById('stat2Label').innerText = '대형견 좁은 길 & 교행 위험도';
-            sizeFeedback = " <b>[대형견 맞춤 안내]</b> 인도 폭이 좁은 구간에서 타 보행자 및 자전거와의 간격을 유지하세요.";
-        } else {
-            document.getElementById('stat2Label').innerText = '보행로 폭 & 교행 위험도';
-        }
+// 공원 접근성 참고 점수 (실제 안전도 점수가 아님)
+const score = greenRatio;
 
-        let score = Math.round((greenRatio * 0.45) + ((100 - carDanger) * 0.35) + (nearbyHotplaces * 3.5));
-        score = Math.max(0, Math.min(100, score));
+// 실제 차량 위험도 데이터는 아직 없음
+const carDanger = null;
 
-        document.getElementById('totalScore').innerText = score;
-        document.getElementById('stat1Text').innerText = greenRatio + '%';
-        document.getElementById('stat1Bar').style.width = greenRatio + '%';
-        document.getElementById('stat2Text').innerText = carDanger + '%';
-        document.getElementById('stat2Bar').style.width = carDanger + '%';
-        document.getElementById('stat3Text').innerText = nearbyHotplaces + '곳';
-        document.getElementById('stat3Bar').style.width = (nearbyHotplaces * 15) + '%';
+// 반려견 크기에 따른 안내
+let sizeFeedback = "";
 
-        const roadDetailMsg = (startObj.roadLine || endObj.roadLine) ? " 🛣️ <b>세부 골목길/이면도로 선형이 정밀 반영되었습니다.</b>" : "";
-        document.getElementById('evalFeedback').innerHTML = (score >= 80 ? "✨ <b>차량이 적은 보행로/이면도로 위주의 안전한 추천 코스입니다!</b>" : "💡 <b>차도 횡단 주의 구간이 일부 포함된 코스입니다.</b>") + roadDetailMsg + sizeFeedback;
+if (currentDogSize === 'large') {
+    sizeFeedback =
+        " <b>[대형견 안내]</b> 좁은 보행로에서는 다른 보행자 및 자전거와 충분한 간격을 유지하세요.";
+}
 
-        // 지도에 실제 좌표 기반 안전 경로 선(Line) 및 마커 렌더링
+// 전체 점수 표시
+document.getElementById('totalScore').innerText = score;
+
+// 첫 번째 지표: 경로 주변 공원 접근성
+const stat1Label = document.getElementById('stat1Label');
+
+if (stat1Label) {
+    stat1Label.innerText = '공원 접근성 (1km 이내)';
+}
+
+document.getElementById('stat1Text').innerText = greenRatio + '%';
+document.getElementById('stat1Bar').style.width = greenRatio + '%';
+
+// 두 번째 지표: 차량 위험도는 아직 측정하지 않음
+document.getElementById('stat2Label').innerText =
+    '차량 위험도 (데이터 미연동)';
+
+document.getElementById('stat2Text').innerText = '분석 전';
+document.getElementById('stat2Bar').style.width = '0%';
+
+// 세 번째 지표: 경로 주변 공원 수
+const stat3Label = document.getElementById('stat3Label');
+
+if (stat3Label) {
+    stat3Label.innerText = '주변 공원 수 (1km 이내)';
+}
+
+document.getElementById('stat3Text').innerText =
+    nearbyHotplaces + '곳';
+
+document.getElementById('stat3Bar').style.width =
+    Math.min(100, nearbyHotplaces * 15) + '%';
+
+        const parkFeedback = nearbyHotplaces > 0
+    ? `🌳 <b>경로 주변 1km 이내에 등록된 공원이 ${nearbyHotplaces}곳 있습니다.</b>`
+    : "🌿 <b>경로 주변 1km 이내에서 등록된 공원을 확인하지 못했습니다.</b>";
+
+document.getElementById('evalFeedback').innerHTML =
+    `📍 <b>실제 도보 경로를 분석했습니다.</b> ` +
+    `경로의 공원 접근성은 ${greenRatio}%입니다. ` +
+    parkFeedback +
+    " <small>※ 공원 위치 데이터 기반 참고 지표이며, 차량 위험도나 실제 안전도를 측정한 결과는 아닙니다.</small>" +
+    sizeFeedback;
+        // 지도에 실제 좌표 기반 경로 선(Line) 및 마커 렌더링
         evalRouteSource.clear();
 
         const routeLineColor = score >= 80 ? '#4ADE80' : (score >= 60 ? '#38BDF8' : '#FB923C');
@@ -353,9 +514,9 @@ window.evaluateRoute = async function() {
             glowColor: routeGlowColor,
             type: 'evalLine',
             details: {
-                name: `🛡️ [실제 이면도로 정밀 경로] ${startName} ➜ ${endName}`,
-                addr: `보행 경로: 세부 도로명 선형 기반 차도 회피 보행 네트워크`,
-                time: `거리: 약 ${distKm}km (도보 ${walkMin}분) | 안전도: ${score}점 (녹지율 ${greenRatio}%)`
+               name: `🐾 [실제 도보 경로] ${startName} ➜ ${endName}`,
+addr: `Valhalla 보행 경로 기반 | 주변 공원 ${nearbyHotplaces}곳`,
+time: `거리: 약 ${distKm}km (도보 약 ${walkMin}분) | 공원 접근성: ${greenRatio}%`
             }
         }));
 
