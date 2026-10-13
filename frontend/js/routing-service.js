@@ -285,73 +285,151 @@ function buildRoadSegments(pStart, pEnd) {
 // 실제 경로 주변 공원 접근성 분석
 function analyzeRouteParks(routeCoords) {
     const parks = Array.isArray(rawParksData) ? rawParksData : [];
+    const validParks = parks.map(park => ({
+        name: park.PARK_NM,
+        lon: Number(park.XCRD),
+        lat: Number(park.YCRD)
+    })).filter(park => park.name && Number.isFinite(park.lon) &&
+        Number.isFinite(park.lat) && park.lon >= 124 && park.lon <= 132 &&
+        park.lat >= 33 && park.lat <= 39);
 
-    const validParks = parks.filter(park => {
-        const lon = Number(park.XCRD);
-        const lat = Number(park.YCRD);
-
-        return Number.isFinite(lon) &&
-               Number.isFinite(lat) &&
-               lon >= 124 && lon <= 132 &&
-               lat >= 33 && lat <= 39 &&
-               !(lon === 0 && lat === 0);
-    });
-
-    // 경로를 따라 약 50m 간격으로 샘플링
-    const route = new ol.geom.LineString(
-        routeCoords.map(coord => ol.proj.fromLonLat(coord))
-    );
-
-    const routeLength = ol.sphere.getLength(route, {
-        projection: 'EPSG:3857'
-    });
-
-    const sampleCount = Math.max(
-        1,
-        Math.min(500, Math.ceil(routeLength / 50))
-    );
-
-    let nearParkSamples = 0;
-    const nearbyParkNames = new Set();
-
-    for (let i = 0; i <= sampleCount; i++) {
-        const position = route.getCoordinateAt(i / sampleCount);
-        const lonLat = ol.proj.toLonLat(position);
-
-        let nearPark = false;
-
-        for (const park of validParks) {
-            const parkCoords = [
-                Number(park.XCRD),
-                Number(park.YCRD)
-            ];
-
-            const distance = ol.sphere.getDistance(
-                lonLat,
-                parkCoords
-            );
-
-            if (distance <= 1000) {
-                nearPark = true;
-
-                if (park.PARK_NM) {
-                    nearbyParkNames.add(park.PARK_NM);
-                }
-            }
-        }
-
-        if (nearPark) {
-            nearParkSamples++;
-        }
+    if (!Array.isArray(routeCoords) || routeCoords.length < 2) {
+        return { closeParkPercent: 0, parkProximityPercent: 0,
+            nearbyParkCount: 0, nearestParks: [], mediumParkPercent: 0,
+            broadParkPercent: 0, hasParkData: validParks.length > 0 };
     }
 
+    const route = new ol.geom.LineString(routeCoords.map(c => ol.proj.fromLonLat(c)));
+    const routeLength = ol.sphere.getLength(route, { projection: 'EPSG:3857' });
+    const sampleCount = Math.max(1, Math.min(500, Math.ceil(routeLength / 50)));
+    const counters = { close: 0, medium: 0, broad: 0, near: 0 };
+    const nearNames = new Set();
+    const closestParks = new Map();
+
+    // 중심점에서 경로 전체 선분까지의 최소거리: 샘플 지점만 비교할 때의 오차 방지.
+    // OpenLayers EPSG:3857의 거리 왜곡을 줄이기 위해 공원 위도에서 보정한다.
+    const projected = route.getCoordinates();
+    for (const park of validParks) {
+        const center = ol.proj.fromLonLat([park.lon, park.lat]);
+        let minSq = Infinity;
+        for (let i = 1; i < projected.length; i++) {
+            const a = projected[i - 1], b = projected[i];
+            const dx = b[0] - a[0], dy = b[1] - a[1];
+            const denom = dx * dx + dy * dy;
+            const t = denom ? Math.max(0, Math.min(1,
+                ((center[0] - a[0]) * dx + (center[1] - a[1]) * dy) / denom)) : 0;
+            const x = a[0] + t * dx, y = a[1] + t * dy;
+            minSq = Math.min(minSq, (center[0] - x) ** 2 + (center[1] - y) ** 2);
+        }
+        const meters = Math.sqrt(minSq) * Math.cos(park.lat * Math.PI / 180);
+        const previous = closestParks.get(park.name);
+        if (previous === undefined || meters < previous) closestParks.set(park.name, meters);
+        if (meters <= 1000) nearNames.add(park.name);
+    }
+
+    // 50m 간격의 경로 지점별 근접도: 공원 경계/실제 녹지 면적을 의미하지 않음.
+    for (let i = 0; i <= sampleCount; i++) {
+        const point = ol.proj.toLonLat(route.getCoordinateAt(i / sampleCount));
+        let minDistance = Infinity;
+        for (const park of validParks) {
+            minDistance = Math.min(minDistance,
+                ol.sphere.getDistance(point, [park.lon, park.lat]));
+        }
+        if (minDistance <= 100) counters.close++;
+        if (minDistance <= 300) counters.medium++;
+        if (minDistance <= 500) counters.broad++;
+        if (minDistance <= 1000) counters.near++;
+    }
+    const percent = count => Math.round(count * 100 / (sampleCount + 1));
     return {
-        parkProximityPercent: Math.round(
-            (nearParkSamples / (sampleCount + 1)) * 100
-        ),
-        nearbyParkCount: nearbyParkNames.size
+        closeParkPercent: percent(counters.close),
+        mediumParkPercent: percent(counters.medium),
+        broadParkPercent: percent(counters.broad),
+        parkProximityPercent: percent(counters.near),
+        nearbyParkCount: nearNames.size,
+        hasParkData: validParks.length > 0,
+        nearestParks: [...closestParks.entries()]
+            .sort((a, b) => a[1] - b[1]).slice(0, 5)
+            .map(([name, distanceMeter]) => ({ name, distanceMeter: Math.round(distanceMeter) }))
     };
 }
+
+// OpenStreetMap의 공원/녹지 폴리곤을 이용한 경로 내부 구간 추정.
+// OSM 누락 구역이 있으므로 실제 전체 녹지 비율로 단정하지 않는다.
+async function analyzeMappedGreenAreas(routeCoords) {
+    if (!Array.isArray(routeCoords) || routeCoords.length < 2) return null;
+    const lons = routeCoords.map(p => Number(p[0]));
+    const lats = routeCoords.map(p => Number(p[1]));
+    if (![...lons, ...lats].every(Number.isFinite)) return null;
+    const south = Math.max(-90, Math.min(...lats) - 0.004);
+    const north = Math.min(90, Math.max(...lats) + 0.004);
+    const west = Math.max(-180, Math.min(...lons) - 0.004);
+    const east = Math.min(180, Math.max(...lons) + 0.004);
+    // 과도하게 넓은 경로는 공개 Overpass 서버에 요청하지 않는다.
+    if ((north - south) * (east - west) > 0.035) return null;
+    const bbox = [south, west, north, east].join(',');
+    const query = `[out:json][timeout:12];(way["leisure"~"^(park|garden|nature_reserve)$"](${bbox});way["landuse"~"^(forest|grass|meadow)$"](${bbox});way["natural"~"^(wood|grassland)$"](${bbox}););out geom;`;
+    // Public Overpass instances can be unavailable or blocked by browser CORS.
+    // Retry with another instance; never turn a failed request into a 0% result.
+    const endpoints = [
+        'https://overpass.kumi.systems/api/interpreter',
+        'https://overpass-api.de/api/interpreter',
+        'https://overpass.nchc.org.tw/api/interpreter'
+    ];
+    let data = null;
+    let lastError = '응답 없음';
+    for (const endpoint of endpoints) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 18000);
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                body: new URLSearchParams({ data: query }),
+                signal: controller.signal
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const result = await response.json();
+            if (!Array.isArray(result.elements)) throw new Error('OSM 응답 형식 오류');
+            data = result;
+            break;
+        } catch (err) {
+            lastError = `${endpoint}: ${err.message}`;
+            console.warn('[Dogwalk] OSM 서버 재시도:', lastError);
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+    if (!data) {
+        console.warn('[Dogwalk] 모든 OSM 서버 조회 실패:', lastError);
+        return { unavailable: true, reason: 'OSM 서버 연결 실패 (브라우저 콘솔 확인)' };
+    }
+    try {
+        const polygons = (data.elements || []).filter(el => {
+            const g = el.geometry;
+            return Array.isArray(g) && g.length >= 4 &&
+                Math.abs(g[0].lat - g[g.length - 1].lat) < 1e-7 &&
+                Math.abs(g[0].lon - g[g.length - 1].lon) < 1e-7;
+        }).map(el => new ol.geom.Polygon([
+            el.geometry.map(p => ol.proj.fromLonLat([p.lon, p.lat]))
+        ]));
+        const route = new ol.geom.LineString(routeCoords.map(p => ol.proj.fromLonLat(p)));
+        const length = ol.sphere.getLength(route, { projection: 'EPSG:3857' });
+        const samples = Math.max(1, Math.min(1200, Math.ceil(length / 10)));
+        let covered = 0;
+        for (let i = 0; i < samples; i++) {
+            const point = route.getCoordinateAt((i + 0.5) / samples);
+            if (polygons.some(p => p.intersectsCoordinate(point))) covered++;
+        }
+        return { percent: Math.round(covered * 100 / samples),
+            distanceMeter: Math.round(length * covered / samples),
+            polygonCount: polygons.length };
+    } catch (err) {
+        console.warn('[Dogwalk] OSM 녹지 경계 분석 실패:', err.message);
+        return { unavailable: true, reason: 'OSM 경계 데이터 처리 실패' };
+    }
+}
+
 window.evaluateRoute = async function() {
     const startName = document.getElementById('startPoint').value.trim();
     const endName = document.getElementById('endPoint').value.trim();
@@ -371,7 +449,11 @@ window.evaluateRoute = async function() {
         console.log('[Dogwalk] 산책 출발지 좌표:', startLonLat);
         // 산책 출발지 좌표로 날씨 정보 갱신
 if (typeof window.loadWeather === 'function') {
-    window.loadWeather(startLonLat[0], startLonLat[1]);
+    try {
+        await window.loadWeather(startLonLat[0], startLonLat[1]);
+    } catch (error) {
+        console.error('[날씨 조회 실패]', error);
+    }
 }
 
         // 출발지 좌표로 자치구를 확인하고 대기질 갱신
@@ -457,13 +539,67 @@ if (!Array.isArray(routeData.coordinates) || routeData.coordinates.length < 2) {
 const routePoints = routeData.coordinates.map(coord => ol.proj.fromLonLat(coord));
 const distanceMeter = routeData.distanceMeter;
         const distKm = (distanceMeter / 1000).toFixed(2);
-        const walkMin = Math.round((distanceMeter / 1000) * 15); // 분당 65m 기준
+        const walkMin = Number.isFinite(Number(routeData.durationSeconds))
+            ? Math.round(Number(routeData.durationSeconds) / 60)
+            : Math.round((distanceMeter / 1000) * 15);
 
-        document.getElementById('scoreCard').style.display = 'block';
+        // 경로 좌표와 서울시 공원 중심점 기반 근접도 (실제 녹지 면적 비율 아님)
+        const parkAnalysis = analyzeRouteParks(routeData.coordinates);
+        const mappedGreen = await analyzeMappedGreenAreas(routeData.coordinates);
+        const mappedGreenSummary = mappedGreen && !mappedGreen.unavailable
+            ? `\n🗺️ OSM 등록 녹지 경계 내부: 약 ${mappedGreen.distanceMeter}m (${mappedGreen.percent}%, 추정)\n※ OSM에 등록된 폐합 폴리곤 ${mappedGreen.polygonCount}개 기준. 누락된 녹지는 포함되지 않습니다.`
+            : `\n🗺️ 녹지 경계 분석: ${mappedGreen?.reason || '데이터 조회 불가'} (0%로 간주하지 않음)`;
+
+        // 백엔드에서 전달한 일반 경로 / 녹지 경유 경로 비교 표시
+        const scoreCard = document.getElementById('scoreCard');
+        scoreCard.style.display = 'block';
+        let comparisonPanel = document.getElementById('routeComparisonPanel');
+        if (!comparisonPanel) {
+            comparisonPanel = document.createElement('div');
+            comparisonPanel.id = 'routeComparisonPanel';
+            comparisonPanel.style.cssText = 'margin-top:14px;padding:14px;border:1px solid rgba(255,255,255,0.2);border-radius:10px;line-height:1.8;font-size:0.85rem;color:#F1F5F9;white-space:pre-line;';
+            scoreCard.appendChild(comparisonPanel);
+        }
+        const formatDistance = meters => Number(meters) >= 1000
+            ? (Number(meters) / 1000).toFixed(2) + 'km'
+            : Math.round(Number(meters)) + 'm';
+        const formatTime = seconds => Math.round(Number(seconds) / 60) + '분';
+        const basic = routeData.basicRoute;
+        const green = routeData.greenRoute;
+        const nearestParkSummary = parkAnalysis.nearestParks.length
+            ? '\n🌳 경로 주변 가까운 공원 (중심점~경로 선분 최단거리)\n' +
+              parkAnalysis.nearestParks.map((park, index) =>
+                  `${index + 1}. ${park.name}: 약 ${park.distanceMeter}m`
+              ).join('\n')
+            : '\n🌳 경로 1km 이내에서 확인된 공원이 없습니다.';
+        if (basic && green) {
+            const extraDistance = Math.max(0, green.distanceMeter - basic.distanceMeter);
+            const extraTime = Math.max(0, green.durationSeconds - basic.durationSeconds);
+            comparisonPanel.textContent =
+                '🌿 일반 경로 vs 녹지 우선 경로\n' +
+                '일반 경로: ' + formatDistance(basic.distanceMeter) + ' · ' + formatTime(basic.durationSeconds) + '\n' +
+                '녹지 우선: ' + formatDistance(green.distanceMeter) + ' · ' + formatTime(green.durationSeconds) + '\n' +
+                '녹지 경유지: ' + (routeData.greenWaypoint || '정보 없음') + '\n' +
+                '추가 거리: ' + formatDistance(extraDistance) + ' · 추가 시간: ' + formatTime(extraTime) + '\n' +
+                '공원 중심점 근접도 (100m / 300m / 500m): ' + [parkAnalysis.closeParkPercent, parkAnalysis.mediumParkPercent, parkAnalysis.broadParkPercent].join('% / ') + '% (추정)' + '\n' +
+                '※ 공원 중심점 기반 지표로 실제 녹지 구간 비율은 아닙니다.' + mappedGreenSummary + nearestParkSummary +
+                '\n※ 공원 경계·입구까지의 거리나 실제 도보 거리는 아닙니다.';
+        } else if (basic) {
+            comparisonPanel.textContent =
+                '🚶 일반 도보 경로\n' +
+                '거리: ' + formatDistance(basic.distanceMeter) + ' · ' + formatTime(basic.durationSeconds) + '\n' +
+                '조건에 맞는 녹지 경유 경로가 없어 일반 경로를 안내합니다.' + '\n' +
+                '공원 중심점 근접도 (100m / 300m / 500m): ' + [parkAnalysis.closeParkPercent, parkAnalysis.mediumParkPercent, parkAnalysis.broadParkPercent].join('% / ') + '% (추정)' + '\n' +
+                '※ 공원 중심점 기반 지표로 실제 녹지 구간 비율은 아닙니다.' + mappedGreenSummary + nearestParkSummary +
+                '\n※ 공원 경계·입구까지의 거리나 실제 도보 거리는 아닙니다.';
+        } else {
+            comparisonPanel.textContent =
+                '🚶 도보 경로\n' +
+                '거리: ' + formatDistance(distanceMeter) + ' · ' + formatTime(routeData.durationSeconds || walkMin * 60) + '\n' +
+                '경로 비교 정보는 백엔드 업데이트 후 표시됩니다.' + mappedGreenSummary + nearestParkSummary;
+        }
         
        // 실제 Valhalla 산책 경로를 이용한 공원 접근성 분석
-const parkAnalysis = analyzeRouteParks(routeData.coordinates);
-
 const greenRatio = parkAnalysis.parkProximityPercent;
 const nearbyHotplaces = parkAnalysis.nearbyParkCount;
 

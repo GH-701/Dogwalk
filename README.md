@@ -105,18 +105,11 @@ npm start
 ```env
 PORT=5000
 
-# 서울시 오픈API 키 (http://data.seoul.go.kr/)
-SEOUL_API_KEY=566770696967756e393361534a7546
+PORT=5000
 
-# 공공데이터포털 일반 인증키 (https://www.data.go.kr/)
-PUBLIC_DATA_KEY=c9270e0cae9e278c2a73bdf639e7e8b9b89695977837e8890327e34d02150612
-
-# 식품의약품안전처 인증키 (https://www.foodsafetykorea.go.kr/)
-FOOD_SAFETY_KEY=76b9bb07ffc348b9a149
-```
-
-> **주의**: `.env` 파일은 실제 API 키가 포함되어 있으므로 절대로 GitHub 공개 저장소에 푸시하지 마세요. (이미 `.gitignore`에 등록되어 있습니다.)
-
+SEOUL_API_KEY=YOUR_SEOUL_API_KEY
+PUBLIC_DATA_KEY=YOUR_PUBLIC_DATA_KEY
+FOOD_SAFETY_KEY=YOUR_FOOD_SAFETY_KEY
 ---
 
 ## 📤 GitHub에 업로드(저장)하는 방법

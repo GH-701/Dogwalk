@@ -244,11 +244,9 @@
     <div style="font-size:0.72rem; color:var(--text-dim); margin-top:8px;">
         ※ 측정소 기준 대기질 정보이며, 산책 경로 전체의 실측값은 아닙니다.
     </div>
+    </div>
     <!-- 실시간 날씨 정보 카드 -->
-<div id="weatherCard"
 
-
-<!-- 실시간 날씨 정보 카드 -->
 <div id="weatherCard"
      style="display:block; margin-top:16px; padding:16px; border-radius:12px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);">
 
@@ -559,6 +557,7 @@ if (data.temperature == null || !Number.isFinite(temperature)) {
 setWeatherText('weatherAdvice', weatherAdvice);
 
         console.log('[Dogwalk] 날씨 정보 로딩 성공:', data);
+    
 
     } catch (error) {
         console.error('[Dogwalk] 날씨 오류:', error);
@@ -573,7 +572,16 @@ setWeatherText('weatherAdvice', weatherAdvice);
 }
 
 window.loadWeather = loadWeather;
-loadWeather();
+function setWeatherText(id, value) {
+    const el = document.getElementById(id);
+
+    if (!el) {
+        console.warn('[날씨 요소 없음]', id);
+        return;
+    }
+
+    el.textContent = value;
+}
 </script>
 <script>
 async function loadWalkCondition(lon, lat, region = '마포구') {

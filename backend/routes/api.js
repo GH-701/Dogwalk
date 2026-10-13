@@ -189,6 +189,8 @@ router.get('/reverse-geocode', async (req, res) => {
     }
 });
 // 5. 실제 도보 경로 계산 API (Valhalla)
+// 기본 도보 경로와 녹지 경유 경로 비교
+
 router.get('/walking-route', async (req, res) => {
     try {
         const required = ['startLon', 'startLat', 'endLon', 'endLat'];
@@ -217,54 +219,59 @@ router.get('/walking-route', async (req, res) => {
             });
         }
 
-        const routeRequest = {
-            locations: [
-                { lat: startLat, lon: startLon },
-                { lat: endLat, lon: endLon }
-            ],
-            costing: 'pedestrian',
-            units: 'kilometers',
-            directions_options: {
-                units: 'kilometers'
-            }
-        };
+        const start = [startLon, startLat];
+        const end = [endLon, endLat];
 
-        console.log('[Valhalla] 도보 경로 요청 시작');
+        // 녹지 경유 후보 좌표
+        const greenWaypoints = [
+            { name: '경의선숲길', coords: [126.92320, 37.55890] },
+            { name: '청계천', coords: [126.98000, 37.56910] },
+            { name: '서울숲', coords: [127.04160, 37.54550] },
+            { name: '여의도한강공원', coords: [126.93280, 37.52840] },
+            { name: '석촌호수', coords: [127.10250, 37.50900] },
+            { name: '올림픽공원', coords: [127.12150, 37.52060] },
+            { name: '양재시민의숲', coords: [127.03850, 37.47050] },
+            { name: '망원한강공원', coords: [126.89810, 37.55390] },
+            { name: '보라매공원', coords: [126.91980, 37.49320] },
+            { name: '선유도공원', coords: [126.90150, 37.54320] }
+        ];
 
-        const url = new URL('https://valhalla1.openstreetmap.de/route');
-        url.searchParams.set('json', JSON.stringify(routeRequest));
+        // 두 좌표 사이 직선거리 계산 (미터)
+        function distanceMeters(a, b) {
+            const R = 6371000;
+            const toRad = deg => deg * Math.PI / 180;
 
-        const response = await fetch(url, {
-            headers: {
-                'Accept': 'application/json'
-            },
-            signal: AbortSignal.timeout(20000)
-        });
+            const dLat = toRad(b[1] - a[1]);
+            const dLon = toRad(b[0] - a[0]);
 
-        const responseText = await response.text();
+            const h =
+                Math.sin(dLat / 2) ** 2 +
+                Math.cos(toRad(a[1])) *
+                Math.cos(toRad(b[1])) *
+                Math.sin(dLon / 2) ** 2;
 
-        console.log('[Valhalla 응답 상태]', response.status);
-
-        let data;
-
-        try {
-            data = JSON.parse(responseText);
-        } catch (err) {
-            return res.status(502).json({
-                error: 'Valhalla에서 JSON 응답을 받지 못했습니다.',
-                upstreamStatus: response.status
-            });
+            return 2 * R * Math.asin(Math.sqrt(h));
         }
 
-        if (!response.ok || !data.trip || !data.trip.legs) {
-            return res.status(502).json({
-                error: 'Valhalla 도보 경로 계산에 실패했습니다.',
-                details: data.error || data.error_code || data.status_message
-            });
-        }
+        const directDistance = distanceMeters(start, end);
 
-        // Valhalla는 경로를 인코딩된 polyline으로 반환합니다.
-        // 아래 함수로 위도/경도 좌표 배열로 변환합니다.
+        // 출발지와 도착지 사이에 있는 녹지 후보 선택
+        const candidates = greenWaypoints
+            .map(item => ({
+                ...item,
+                viaDistance:
+                    distanceMeters(start, item.coords) +
+                    distanceMeters(item.coords, end)
+            }))
+            .filter(item =>
+                directDistance > 100 &&
+                item.viaDistance <= directDistance * 1.25 &&
+                distanceMeters(start, item.coords) > 100 &&
+                distanceMeters(end, item.coords) > 100
+            )
+            .sort((a, b) => a.viaDistance - b.viaDistance);
+
+        // Valhalla polyline6 좌표 변환
         function decodePolyline(encoded) {
             let index = 0;
             let lat = 0;
@@ -282,7 +289,9 @@ router.get('/walking-route', async (req, res) => {
                     shift += 5;
                 } while (byte >= 0x20);
 
-                lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+                lat += (result & 1)
+                    ? ~(result >> 1)
+                    : (result >> 1);
 
                 shift = 0;
                 result = 0;
@@ -293,37 +302,163 @@ router.get('/walking-route', async (req, res) => {
                     shift += 5;
                 } while (byte >= 0x20);
 
-                lon += (result & 1) ? ~(result >> 1) : (result >> 1);
+                lon += (result & 1)
+                    ? ~(result >> 1)
+                    : (result >> 1);
 
-                // Valhalla는 정밀도 6을 사용합니다.
                 coordinates.push([lon / 1e6, lat / 1e6]);
             }
 
             return coordinates;
         }
 
-        const coordinates = [];
+        // Valhalla 보행 도로망 경로 요청
+        async function requestWalkingRoute(points) {
+            const routeRequest = {
+                locations: points.map(point => ({
+                    lon: point[0],
+                    lat: point[1]
+                })),
+                costing: 'pedestrian',
+                costing_options: {
+                    pedestrian: {
+                        use_ferry: 0,
+                        use_living_streets: 1,
+                        use_tracks: 1,
+                        use_hills: 0.3
+                    }
+                },
+                units: 'kilometers',
+                directions_options: {
+                    units: 'kilometers'
+                }
+            };
 
-        for (const leg of data.trip.legs) {
-            const legCoordinates = decodePolyline(leg.shape);
+            const url = new URL(
+                'https://valhalla1.openstreetmap.de/route'
+            );
 
-            if (coordinates.length > 0 && legCoordinates.length > 0) {
-                legCoordinates.shift();
+            url.searchParams.set(
+                'json',
+                JSON.stringify(routeRequest)
+            );
+
+            const response = await fetch(url, {
+                headers: {
+                    Accept: 'application/json'
+                },
+                signal: AbortSignal.timeout(20000)
+            });
+
+            const responseText = await response.text();
+
+            let data;
+
+            try {
+                data = JSON.parse(responseText);
+            } catch (error) {
+                throw new Error(
+                    'Valhalla에서 JSON 응답을 받지 못했습니다. HTTP ' +
+                    response.status
+                );
             }
 
-            coordinates.push(...legCoordinates);
+            if (!response.ok || !data.trip?.legs?.length) {
+                throw new Error(
+                    data.error ||
+                    data.status_message ||
+                    'Valhalla 도보 경로 계산 실패'
+                );
+            }
+
+            const coordinates = [];
+
+            for (const leg of data.trip.legs) {
+                const legCoordinates = decodePolyline(leg.shape);
+
+                if (coordinates.length && legCoordinates.length) {
+                    legCoordinates.shift();
+                }
+
+                coordinates.push(...legCoordinates);
+            }
+
+            if (coordinates.length < 2) {
+                throw new Error('경로 좌표 생성 실패');
+            }
+
+            return {
+                coordinates,
+                distanceMeter: data.trip.summary.length * 1000,
+                durationSeconds: data.trip.summary.time
+            };
         }
 
-        if (coordinates.length < 2) {
-            return res.status(502).json({
-                error: '경로 좌표를 생성하지 못했습니다.'
-            });
+        // 1. 기본 도보 경로 계산
+        const basicRoute = await requestWalkingRoute([start, end]);
+
+        let selectedRoute = basicRoute;
+        let selectedGreen = null;
+
+        // 2. 녹지 경유 경로 계산
+        if (candidates.length > 0) {
+            const candidate = candidates[0];
+
+            try {
+                const greenRoute = await requestWalkingRoute([
+                    start,
+                    candidate.coords,
+                    end
+                ]);
+
+                // 실제 도보 거리 기준 30% 이내 우회만 허용
+                if (
+                    greenRoute.distanceMeter <=
+                    basicRoute.distanceMeter * 1.3
+                ) {
+                    selectedRoute = greenRoute;
+                    selectedGreen = candidate.name;
+                }
+            } catch (greenError) {
+                console.warn(
+                    '[Valhalla] 녹지 경유 실패, 기본 경로 사용:',
+                    greenError.message
+                );
+            }
         }
 
+        console.log('[Valhalla] 경로 선택:', {
+            greenWaypoint: selectedGreen,
+            distanceMeter: selectedRoute.distanceMeter
+        });
+
+                 // 기존 응답 + 경로 비교 정보
         res.json({
-            coordinates,
-            distanceMeter: data.trip.summary.length * 1000,
-            durationSeconds: data.trip.summary.time
+            coordinates: selectedRoute.coordinates,
+            distanceMeter: selectedRoute.distanceMeter,
+            durationSeconds: selectedRoute.durationSeconds,
+            routeType: selectedGreen ? 'green' : 'basic',
+            greenWaypoint: selectedGreen,
+
+            basicRoute: {
+                coordinates: basicRoute.coordinates,
+                distanceMeter: basicRoute.distanceMeter,
+                durationSeconds: basicRoute.durationSeconds
+            },
+
+            greenRoute: selectedGreen ? {
+                coordinates: selectedRoute.coordinates,
+                distanceMeter: selectedRoute.distanceMeter,
+                durationSeconds: selectedRoute.durationSeconds
+            } : null,
+
+            extraDistanceMeter: selectedGreen
+                ? Math.max(0, selectedRoute.distanceMeter - basicRoute.distanceMeter)
+                : 0,
+
+            extraDurationSeconds: selectedGreen
+                ? Math.max(0, selectedRoute.durationSeconds - basicRoute.durationSeconds)
+                : 0
         });
 
     } catch (err) {
@@ -333,6 +468,91 @@ router.get('/walking-route', async (req, res) => {
             error: '도보 경로 서비스를 이용할 수 없습니다.',
             details: err.message
         });
+    }
+});
+
+// OSM green polygons: persistent cache and rate-limit-aware proxy.
+const fsGreen = require('node:fs');
+const pathGreen = require('node:path');
+const greenCacheDir = pathGreen.join(__dirname, '..', 'cache', 'green-areas');
+const greenCooldown = new Map();
+const greenInflight = new Map();
+const greenServers = [
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter',
+    'https://overpass.nchc.org.tw/api/interpreter'
+];
+
+router.get('/green-areas', async (req, res) => {
+    const names = ['south', 'west', 'north', 'east'];
+    if (names.some(name => req.query[name] === undefined || req.query[name] === '')) {
+        return res.status(400).json({ error: 'south, west, north, east 값이 필요합니다.' });
+    }
+    const [south, west, north, east] = names.map(name => Number(req.query[name]));
+    if (![south, west, north, east].every(Number.isFinite) ||
+        south < 33 || north > 39 || west < 124 || east > 132 ||
+        south >= north || west >= east ||
+        north - south > 0.06 || east - west > 0.06) {
+        return res.status(400).json({ error: '국내 0.06도 이내의 올바른 bbox가 필요합니다.' });
+    }
+
+    const bbox = [south, west, north, east].map(v => v.toFixed(5)).join(',');
+    const cacheFile = pathGreen.join(greenCacheDir, bbox.replaceAll(',', '_') + '.json');
+    // A successful OSM response is saved to disk and reused across restarts.
+    try {
+        const saved = JSON.parse(fsGreen.readFileSync(cacheFile, 'utf8'));
+        if (Array.isArray(saved.elements)) return res.json({ ...saved, cached: true });
+    } catch (_) { /* No cache yet. */ }
+
+    const query = `[out:json][timeout:15];(way["leisure"~"^(park|garden|nature_reserve)$"](${bbox});relation["leisure"~"^(park|garden|nature_reserve)$"](${bbox});way["landuse"~"^(forest|grass|meadow|recreation_ground)$"](${bbox});relation["landuse"~"^(forest|grass|meadow|recreation_ground)$"](${bbox});way["natural"~"^(wood|grassland|scrub)$"](${bbox});relation["natural"~"^(wood|grassland|scrub)$"](${bbox}););out geom;`;
+    if (!greenInflight.has(bbox)) {
+        const pending = (async () => {
+            const errors = [];
+            for (const server of greenServers) {
+                const until = greenCooldown.get(server) || 0;
+                if (until > Date.now()) {
+                    errors.push(`${new URL(server).hostname}: 요청 제한 대기 중`);
+                    continue;
+                }
+                try {
+                    const response = await fetch(server, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+                        body: new URLSearchParams({ data: query }).toString(),
+                        signal: AbortSignal.timeout(18000)
+                    });
+                    if (response.status === 429 || response.status === 503) {
+                        const retrySeconds = Number(response.headers.get('retry-after'));
+                        const waitMs = Number.isFinite(retrySeconds) && retrySeconds > 0
+                            ? Math.min(retrySeconds * 1000, 3600000) : 300000;
+                        greenCooldown.set(server, Date.now() + waitMs);
+                        throw new Error(`HTTP ${response.status} (요청 제한)`);
+                    }
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    const data = await response.json();
+                    if (!Array.isArray(data.elements)) throw new Error('잘못된 OSM 응답');
+                    const result = { elements: data.elements, source: 'OpenStreetMap', bbox };
+                    try {
+                        fsGreen.mkdirSync(greenCacheDir, { recursive: true });
+                        fsGreen.writeFileSync(cacheFile, JSON.stringify(result));
+                    } catch (saveError) {
+                        console.warn('[green-areas] 캐시 저장 실패:', saveError.message);
+                    }
+                    return result;
+                } catch (error) {
+                    errors.push(`${new URL(server).hostname}: ${error.message}`);
+                }
+            }
+            throw Object.assign(new Error('OSM 녹지 경계 조회 실패'), { details: errors });
+        })();
+        greenInflight.set(bbox, pending);
+        pending.finally(() => greenInflight.delete(bbox)).catch(() => {});
+    }
+    try {
+        return res.json(await greenInflight.get(bbox));
+    } catch (error) {
+        console.error('[API /green-areas]', error.details);
+        return res.status(503).json({ error: error.message, details: error.details, retryLater: true });
     }
 });
 
